@@ -68,3 +68,4 @@ class DM_Loader :
             else : 
                 X_batch = batch.values.reshape(-1, 28,28)/255
                 yield jnp.expand_dims(X_batch, axis=-1), None
+        

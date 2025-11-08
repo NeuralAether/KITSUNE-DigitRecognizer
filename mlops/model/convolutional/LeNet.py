@@ -17,6 +17,7 @@ Output : A softmax function (we will be using linear in our case + logits) -> (N
 """
 
 from config import * 
+import pickle, os
 
 class LeNet : 
     """
@@ -42,6 +43,9 @@ class LeNet :
         self.__kernel_key = jax.random.PRNGKey(42)
         self.__weight_key = jax.random.PRNGKey(123)
         self.__weights = {}
+        self.__shapes = {}
+        # The training variables 
+        self.__velocities = {}
 
     def construct(self, batch: jnp.ndarray) : 
         """
@@ -52,19 +56,21 @@ class LeNet :
             return 
         # C1 : 
         self.__weights["C1"] = {
+            "kernel" : jax.random.normal(self.__kernel_key, shape= (self.__config["C1"]["kernels"]["Out Channels"], 
+                        batch.shape[-1], 
+                        self.__config["C1"]["kernels"]["kh"],
+                        self.__config["C1"]["kernels"]["kw"]) ) 
+        }
+        self.__shapes["C1"] = {
             "kernel_shape" : (self.__config["C1"]["kernels"]["Out Channels"], 
                         batch.shape[-1], 
                         self.__config["C1"]["kernels"]["kh"],
                         self.__config["C1"]["kernels"]["kw"]), 
             "stride_shape" :  (self.__config["C1"]["stride"]["sh"],
                         self.__config["C1"]["stride"]["sw"]),
-            "kernel" : jax.random.normal(self.__kernel_key, shape= (self.__config["C1"]["kernels"]["Out Channels"], 
-                        batch.shape[-1], 
-                        self.__config["C1"]["kernels"]["kh"],
-                        self.__config["C1"]["kernels"]["kw"]) ) 
         }
-        # S2 : 
-        self.__weights["S2"] = {
+        # S2 : (Non trainable)
+        self.__shapes["S2"] = {
             "window_shape" : (self.__config["S2"]["windows"]["wh"],
                              self.__config["S2"]["windows"]["ww"]),
             "stride_shape" : (self.__config["S2"]["stride"]["sh"],
@@ -72,19 +78,21 @@ class LeNet :
         }
         # C3 : 
         self.__weights["C3"] = {
+            "kernel" : jax.random.normal(self.__kernel_key, shape= (self.__config["C3"]["kernels"]["Out Channels"], 
+                        self.__config["C1"]["kernels"]["Out Channels"], 
+                        self.__config["C3"]["kernels"]["kh"],
+                        self.__config["C3"]["kernels"]["kw"]) ) 
+        }
+        self.__shapes["C3"] = {
             "kernel_shape" : (self.__config["C3"]["kernels"]["Out Channels"], 
                         self.__config["C1"]["kernels"]["Out Channels"], 
                         self.__config["C3"]["kernels"]["kh"],
                         self.__config["C3"]["kernels"]["kw"]), 
             "stride_shape" :  (self.__config["C3"]["stride"]["sh"],
                         self.__config["C3"]["stride"]["sw"]),
-            "kernel" : jax.random.normal(self.__kernel_key, shape= (self.__config["C3"]["kernels"]["Out Channels"], 
-                        self.__config["C1"]["kernels"]["Out Channels"], 
-                        self.__config["C3"]["kernels"]["kh"],
-                        self.__config["C3"]["kernels"]["kw"]) ) 
         }
-        # S4 : 
-        self.__weights["S4"] = {
+        # S4 : (None trainable)
+        self.__shapes["S4"] = {
             "window_shape" : (self.__config["S4"]["windows"]["wh"],
                              self.__config["S4"]["windows"]["ww"]),
             "stride_shape" : (self.__config["S4"]["stride"]["sh"],
@@ -92,17 +100,18 @@ class LeNet :
         }
         # C5 : 
         self.__weights["C5"] = {
-            "kernel_shape" : (self.__config["C5"]["kernels"]["Out Channels"], 
-                        self.__config["C3"]["kernels"]["Out Channels"], 
-                        self.__config["C5"]["kernels"]["kh"],
-                        self.__config["C5"]["kernels"]["kw"]), 
-            "stride_shape" :  (self.__config["C5"]["stride"]["sh"],
-                        self.__config["C5"]["stride"]["sw"]),
             "kernel" : jax.random.normal(self.__kernel_key, shape= (self.__config["C5"]["kernels"]["Out Channels"], 
                         self.__config["C3"]["kernels"]["Out Channels"], 
                         self.__config["C5"]["kernels"]["kh"],
                         self.__config["C5"]["kernels"]["kw"]) ) 
         }
+        self.__shapes["C5"] = {
+            "kernel_shape" : (self.__config["C5"]["kernels"]["Out Channels"], 
+                        self.__config["C3"]["kernels"]["Out Channels"], 
+                        self.__config["C5"]["kernels"]["kh"],
+                        self.__config["C5"]["kernels"]["kw"]), 
+            "stride_shape" :  (self.__config["C5"]["stride"]["sh"],
+                        self.__config["C5"]["stride"]["sw"]),}
         # F6 : 
         self.__weights["F6"] = {
             "W" : jax.random.normal(self.__weight_key, shape=(self.__config["C5"]["kernels"]["Out Channels"], self.__config["F6"]["size"])) , 
@@ -118,7 +127,7 @@ class LeNet :
     The forward functions 
     """
 
-    def forward(self, batch: jnp.ndarray): 
+    def forward(self, batch: jnp.ndarray, weights = None): 
         """
         The forward pass: Will actually return the logits
         """
@@ -126,43 +135,106 @@ class LeNet :
             # We compile the model first 
             print("Constructing the model first ...")
             self.construct(batch)
-        
+        if weights is None : 
+            weights = self.__weights
+    
         # C1 : 
-        C1 = self.__convolutional_layer(batch, self.__weights["C1"]["kernel"], stride = self.__weights["C1"]["stride_shape"])
+        C1 = self.__convolutional_layer(batch, weights["C1"]["kernel"], stride = self.__shapes["C1"]["stride_shape"])
         # S2 :
-        S2 = self.__pooling_layer(C1, window= self.__weights["S2"]["window_shape"], stride= self.__weights["S2"]["stride_shape"] )
+        S2 = self.__pooling_layer(C1, window= self.__shapes["S2"]["window_shape"], stride= self.__shapes["S2"]["stride_shape"] )
         # C3 : 
-        C3 = self.__convolutional_layer(S2, self.__weights["C3"]["kernel"], stride = self.__weights["C3"]["stride_shape"])
+        C3 = self.__convolutional_layer(S2, weights["C3"]["kernel"], stride = self.__shapes["C3"]["stride_shape"])
         # S4 : 
-        S4 = self.__pooling_layer(C3, window= self.__weights["S4"]["window_shape"], stride= self.__weights["S4"]["stride_shape"]  )
+        S4 = self.__pooling_layer(C3, window= self.__shapes["S4"]["window_shape"], stride= self.__shapes["S4"]["stride_shape"]  )
         # C5 : 
-        C5 = self.__convolutional_layer(S4, self.__weights["C5"]["kernel"], stride = self.__weights["C5"]["stride_shape"])
+        C5 = self.__convolutional_layer(S4, weights["C5"]["kernel"], stride = self.__shapes["C5"]["stride_shape"])
         C5 = C5.reshape((batch.shape[0], -1)) # Full flat now 
         # F6 : 
-        F6 = self.__fully_connected_layer(C5, self.__weights["F6"]["W"], self.__weights["F6"]["b"] )
+        F6 = self.__fully_connected_layer(C5, weights["F6"]["W"], weights["F6"]["b"], activation= jnp.relu )
         # Output : 
-        logits = self.__fully_connected_layer(F6, self.__weights["Output"]["W"], self.__weights["Output"]["b"] , activation=None)
+        logits = self.__fully_connected_layer(F6, weights["Output"]["W"], weights["Output"]["b"] , activation=None)
         return logits
     
-    def predict(self, batch: jnp.ndarray) : 
+    def predict(self, batch: jnp.ndarray, weights= None) : 
         """
         This predicts and uses the logits to get the softmax layer , not used at training
         """
-        logits = self.forward(batch)
-        max_logit = jnp.max(logits, axis= 1).reshape(-1,1)
-        print(max_logit)
-        corrected_logits = logits - max_logit 
+        logits = self.forward(batch, weights)
+        max_logits = jnp.max(logits, axis= 1, keepdims=True)
+        corrected_logits = logits - max_logits
         exp_logits = jnp.exp(corrected_logits)
-        sum_exp_logits = jnp.sum(exp_logits, axis=1).reshape(-1,1)
+        sum_exp_logits = jnp.sum(exp_logits, axis=1, keepdims=True)
         probabilities = exp_logits/sum_exp_logits
-        return probabilities, jnp.argmax(probabilities, axis=1) +1
+        return probabilities, jnp.argmax(probabilities, axis=1)
     
     """
     The backward functions
     """
 
-    def compile(self) : 
-        pass
+    # The loss function 
+    def __loss_function(self, batch, batch_labels, weights=None) : 
+        """
+        Calculating the categorical cross entropy
+        """
+        logits = self.forward(batch, weights) # The weights should update 
+        max_logits = jnp.max(logits, axis= 1, keepdims=True)
+        corrected_logits = logits - max_logits
+        # Here we do not go to exp logits to keep stability  
+        log_probs = corrected_logits - jnp.log(jnp.sum(jnp.exp(corrected_logits), axis=-1, keepdims=True))
+        correct_log_probs = log_probs[jnp.arange(logits.shape[0]), batch_labels]
+        cce = -correct_log_probs
+        mean_cce = jnp.mean(cce)
+        return mean_cce
+    
+    # The optimizer (SGD with momentum as used in the paper)
+    # Let's manage the velocities for each of the weights: 
+    def __init_momentum_buffers(self): 
+        for layer in self.__weights : 
+            self.__velocities[layer] = {}
+            for param in self.__weights[layer]: 
+                self.__velocities[layer][param] = jnp.zeros_like(self.__weights[layer][param])
+
+    
+    def __optimizer_step(self, batch, batch_labels, learning_rate = 1e-3, momentum = 0.09 ):
+        """
+        Simple SGD
+        """ 
+        grads = jax.grad(lambda weights: self.__loss_function(batch, batch_labels, weights))(self.__weights)        
+        for layer in self.__weights: 
+            for param in self.__weights[layer]:
+                self.__velocities[layer][param] = momentum * self.__velocities[layer][param] - learning_rate * grads[layer][param] # Going in the same direction as previous one
+                self.__weights[layer][param] += self.__velocities[layer][param]
+
+    def __train_data(self, train_generator, learning_rate = 1e-3, momentum=0.09):
+        train_loss = 0.0
+        cpt = 0
+        for batch in train_generator : 
+            images = batch[0] 
+            labels = batch[1]
+            train_loss += self.__loss_function(images, labels)
+            self.__optimizer_step(images, labels, learning_rate, momentum)
+            cpt += batch[0].shape[0]
+        return train_loss/cpt # Some normalization 
+    
+    # Having these two functions mean the model is already precompiled if constructed
+    def train(self, dataloader, epochs = 10, batch_size = 32 , learning_rate= 1e-3, momentum = 0.09 ) : 
+        """
+        The big training function 
+        """
+        tgf = next(dataloader.generate_data_as_batch(batch_size)) 
+        # First we try a run : 
+        self.forward(tgf[0])
+        # If you retry to train, all momentum gets done
+        self.__init_momentum_buffers()
+        # Now let's loop on each epoch : 
+        for epoch in range(epochs) : 
+            # Data preparing
+            train_generator = dataloader.generate_data_as_batch(batch_size)
+            # 1) Let's train 
+            train_loss = self.__train_data(train_generator, learning_rate, momentum)
+            # 2) Let's val 
+            # 3) Let's compute some metrics 
+            print(epoch,"," , train_loss)
 
     """
     The layers
@@ -222,3 +294,44 @@ class LeNet :
         if activation : 
             output = activation(output)
         return output 
+    
+    """
+    Model Saving
+    """
+
+    def save(self, filename) :
+        """
+        Saving the weights: 
+        """
+        # Bundling necessary variables
+        model_state = {
+            "weights": self.__weights,
+            "shapes": self.__shapes,
+            "config": self.__config,
+        }
+        try : 
+            with open(filename, 'wb') as f:
+                pickle.dump(model_state, f)
+            print(f"Model weights and configuration successfully saved to: **{os.path.abspath(filename)}**")
+        except Exception as e : 
+            print(f"Error saving state: {e}")
+
+    def load(self, filename) : 
+        if not os.path.exists(filename):
+            print(f"Error: State file not found at {os.path.abspath(filename)}")
+            return False
+        try:
+            with open(filename, 'rb') as f:
+                loaded_state = pickle.load(f)
+                if "weights" in loaded_state:
+                    self.__weights = loaded_state["weights"]
+                if "shapes" in loaded_state:
+                    self.__shapes = loaded_state["shapes"]
+                if "config" in loaded_state:
+                    self.__config = loaded_state["config"]
+                self.__velocities = {} 
+                print(f"Full model state (weights, shapes, and config) successfully loaded from: **{os.path.abspath(filename)}**")
+            return True
+        except Exception as e:
+            print(f"Error loading state: {e}")
+            return False
