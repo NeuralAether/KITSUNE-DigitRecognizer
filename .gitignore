@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Dev files and data 
+__* 
+
+# Keep package init files
+# We intentionally ignore files/dirs starting with "__" but want to keep
+# Python package entry points ("__init__.py"). Negate the pattern so
+# any __init__.py is no longer ignored.
+!__init__.py
+!**/__init__.py

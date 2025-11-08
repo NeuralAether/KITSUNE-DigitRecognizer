@@ -1,0 +1,13 @@
+# The Data analytics :
+numpy
+pandas
+
+# The JAX libs :  (First lib to learn) 
+jax 
+
+# The visualisation and deployment : 
+matplotlib
+
+# Notebook dependancies: 
+ipykernel
+ipywidgets
