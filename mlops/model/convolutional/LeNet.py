@@ -211,8 +211,8 @@ class LeNet :
         grads = jax.grad(lambda weights: self.__loss_function(batch, batch_labels, weights, False)[0])(self.__weights)        
         for layer in self.__weights: 
             for param in self.__weights[layer]:
-                self.__velocities[layer][param] = momentum * self.__velocities[layer][param] - learning_rate * grads[layer][param] # Going in the same direction as previous one
-                self.__weights[layer][param] += self.__velocities[layer][param]
+                self.__velocities[layer][param] = momentum * self.__velocities[layer][param] + learning_rate * grads[layer][param] # Going in the same direction as previous one
+                self.__weights[layer][param] -= self.__velocities[layer][param]
 
     def __train_data(self, train_generator, learning_rate = 1e-3, momentum=0.09, curr_epoch=1, with_metrics= True): # For one epoch
         train_loss = 0.0
