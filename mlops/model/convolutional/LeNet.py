@@ -18,6 +18,7 @@ Output : A softmax function (we will be using linear in our case + logits) -> (N
 
 from config import * 
 import pickle, os
+from tqdm import tqdm
 
 class LeNet : 
     """
@@ -46,6 +47,9 @@ class LeNet :
         self.__shapes = {}
         # The training variables 
         self.__velocities = {}
+        # The shape variables
+        self.__total_train_batches = 0
+        self.__total_test_batches = 0
 
     def construct(self, batch: jnp.ndarray) : 
         """
@@ -150,7 +154,7 @@ class LeNet :
         C5 = self.__convolutional_layer(S4, weights["C5"]["kernel"], stride = self.__shapes["C5"]["stride_shape"])
         C5 = C5.reshape((batch.shape[0], -1)) # Full flat now 
         # F6 : 
-        F6 = self.__fully_connected_layer(C5, weights["F6"]["W"], weights["F6"]["b"], activation= jnp.relu )
+        F6 = self.__fully_connected_layer(C5, weights["F6"]["W"], weights["F6"]["b"], activation= jnp.tanh )
         # Output : 
         logits = self.__fully_connected_layer(F6, weights["Output"]["W"], weights["Output"]["b"] , activation=None)
         return logits
@@ -172,7 +176,7 @@ class LeNet :
     """
 
     # The loss function 
-    def __loss_function(self, batch, batch_labels, weights=None) : 
+    def __loss_function(self, batch, batch_labels, weights=None, with_prediction = True) : 
         """
         Calculating the categorical cross entropy
         """
@@ -184,7 +188,12 @@ class LeNet :
         correct_log_probs = log_probs[jnp.arange(logits.shape[0]), batch_labels]
         cce = -correct_log_probs
         mean_cce = jnp.mean(cce)
-        return mean_cce
+        if with_prediction :  # Just to make computation faster (we will make sure this is a lot better later on,  separating logit computation )
+            exp_logits = jnp.exp(corrected_logits)
+            sum_exp_logits = jnp.sum(exp_logits, axis=1, keepdims=True)
+            probabilities = exp_logits/sum_exp_logits
+            return mean_cce, jnp.argmax(probabilities, axis=1)
+        return mean_cce, None 
     
     # The optimizer (SGD with momentum as used in the paper)
     # Let's manage the velocities for each of the weights: 
@@ -199,22 +208,65 @@ class LeNet :
         """
         Simple SGD
         """ 
-        grads = jax.grad(lambda weights: self.__loss_function(batch, batch_labels, weights))(self.__weights)        
+        grads = jax.grad(lambda weights: self.__loss_function(batch, batch_labels, weights, False)[0])(self.__weights)        
         for layer in self.__weights: 
             for param in self.__weights[layer]:
                 self.__velocities[layer][param] = momentum * self.__velocities[layer][param] - learning_rate * grads[layer][param] # Going in the same direction as previous one
                 self.__weights[layer][param] += self.__velocities[layer][param]
 
-    def __train_data(self, train_generator, learning_rate = 1e-3, momentum=0.09):
+    def __train_data(self, train_generator, learning_rate = 1e-3, momentum=0.09, curr_epoch=1, with_metrics= True): # For one epoch
         train_loss = 0.0
         cpt = 0
-        for batch in train_generator : 
+        metrics = None 
+        with_prediction = False
+        if with_metrics : 
+            metrics = {
+                "train_accuracy" : 0, 
+            }
+            with_prediction = True
+        pbar = tqdm(train_generator, total=self.__total_train_batches, desc=f"Epoch {curr_epoch}") 
+        for batch in pbar : 
             images = batch[0] 
             labels = batch[1]
-            train_loss += self.__loss_function(images, labels)
+            loss, pred = self.__loss_function(images, labels, with_prediction=with_prediction)
+            train_loss += loss
+            if with_metrics : 
+                metrics["train_accuracy"] += self.__accuracy_unn(pred, labels)
             self.__optimizer_step(images, labels, learning_rate, momentum)
             cpt += batch[0].shape[0]
-        return train_loss/cpt # Some normalization 
+            if with_metrics :
+                pbar.set_postfix(loss = f"{loss/cpt}", accuracy= f"{metrics["train_accuracy"]/cpt:.4f}", refresh= False)
+            else : 
+                pbar.set_postfix(loss = f"{loss/cpt}", refresh= False)
+        if with_metrics : 
+            metrics["train_accuracy"] /= cpt
+            metrics["train_accuracy"] = metrics["train_accuracy"].item()
+            return train_loss/cpt, metrics
+        return train_loss/cpt , None # Some normalization 
+    
+    def __validate_data(self, val_generator, with_metrics = True): 
+        val_loss = 0.0 
+        cpt = 0 
+        metrics = None 
+        with_prediction = False 
+        if with_metrics : 
+            metrics = {
+                "val_accuracy" : 0
+            }
+            with_prediction = True
+        for batch in val_generator : 
+            images = batch[0]
+            labels = batch[1]
+            loss, pred = self.__loss_function(images, labels, with_prediction = with_prediction) 
+            val_loss += loss
+            if with_metrics :
+                metrics["val_accuracy"] += self.__accuracy_unn(pred, labels)
+            cpt += batch[0].shape[0]
+        if with_metrics : 
+            metrics["val_accuracy"] /= cpt
+            metrics["val_accuracy"] = metrics["val_accuracy"].item()
+            return val_loss/cpt, metrics
+        return val_loss/cpt, None
     
     # Having these two functions mean the model is already precompiled if constructed
     def train(self, dataloader, epochs = 10, batch_size = 32 , learning_rate= 1e-3, momentum = 0.09 ) : 
@@ -226,16 +278,30 @@ class LeNet :
         self.forward(tgf[0])
         # If you retry to train, all momentum gets done
         self.__init_momentum_buffers()
+        history = {
+            "train_loss" : [],
+            "val_loss" : [],
+            "metrics" : {
+                "train_accuracy" : [],
+                "val_accuracy" : []
+            }
+        }
         # Now let's loop on each epoch : 
         for epoch in range(epochs) : 
             # Data preparing
-            train_generator = dataloader.generate_data_as_batch(batch_size)
+            train_generator, val_generator, self.__total_train_batches, self.__total_test_batches = dataloader.generate_data_as_train_test_split(batch_size, shuffle=True, keep_previous=True)
             # 1) Let's train 
-            train_loss = self.__train_data(train_generator, learning_rate, momentum)
+            train_loss, tmetrics = self.__train_data(train_generator, learning_rate, momentum, epoch, with_metrics = True)
+            history["train_loss"].append(train_loss)
+            history["metrics"]["train_accuracy"].append(tmetrics["train_accuracy"])
             # 2) Let's val 
-            # 3) Let's compute some metrics 
-            print(epoch,"," , train_loss)
-
+            val_loss, vmetrics = self.__validate_data(val_generator, with_metrics=True)
+            history["val_loss"].append(val_loss)
+            history["metrics"]["val_accuracy"].append(vmetrics["val_accuracy"])
+            print("Epoch :",epoch,"| Training Loss :",train_loss ,"| Validation Loss :",val_loss)  
+            print("Current Metrics: | Training Accuracy:", tmetrics["train_accuracy"], "| Validation Accuracy:", vmetrics["val_accuracy"])
+        return history     
+    
     """
     The layers
     """
@@ -295,6 +361,13 @@ class LeNet :
             output = activation(output)
         return output 
     
+    """
+    The Metrics (Better to construct a class outside but for now let's do it like this)
+    """
+
+    def __accuracy_unn(self, prediction, labels ) : # Computed within the batch 
+        return jnp.sum(prediction == labels)
+
     """
     Model Saving
     """

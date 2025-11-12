@@ -11,3 +11,6 @@ matplotlib
 # Notebook dependancies: 
 ipykernel
 ipywidgets
+
+# Following training and test
+tqdm
