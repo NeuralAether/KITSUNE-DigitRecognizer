@@ -5,7 +5,7 @@ pandas
 # The JAX libs :  (First lib to learn) 
 jax 
 
-# The visualisation and deployment : 
+# The visualisation  : 
 matplotlib
 
 # Notebook dependancies: 

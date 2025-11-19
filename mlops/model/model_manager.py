@@ -12,6 +12,6 @@
 | 2019  | EfficientNet                     | Compound scaling                    |
 | 2020+ | ConvNeXt, RegNet, EfficientNetV2 | Modern, efficient CNNs              |
 """
-from mlops.model.convolutional.LeNet import LeNet
+from mlops.model.convolutional.__LeNet import LeNet
 
 # To fill later on 
