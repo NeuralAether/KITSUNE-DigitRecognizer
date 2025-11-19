@@ -57,20 +57,29 @@ class DM_Loader :
         for i in range(self.__image_data.shape[0]) : 
             yield self.get_data_at_id(i)
 
-    def generate_data_as_batch(self, batch_size : int) : 
+    def generate_data_as_batch(self, batch_size : int, epochs = 1) : 
         n = self.__image_data.shape[0]
-        for start in range(0, n, batch_size) : 
-            end = min(start + batch_size, n)
-            batch = self.__image_data.iloc[start:end]
-            if self.__type == "train" : 
-                y_batch = batch["label"].values
-                X_batch = batch.loc[:, "pixel0":].values.reshape(-1,28,28)/255.0
-                yield jnp.expand_dims(X_batch, axis=-1), jnp.array(y_batch)
-            else : 
-                X_batch = batch.values.reshape(-1, 28,28)/255.0
-                yield jnp.expand_dims(X_batch, axis=-1), None
+        for epoch in range(epochs): 
+            for start in range(0, n, batch_size) : 
+                end = min(start + batch_size, n)
+                batch = self.__image_data.iloc[start:end]
+                if self.__type == "train" : 
+                    y_batch = batch["label"].values
+                    X_batch = batch.loc[:, "pixel0":].values.reshape(-1,28,28)/255.0
+                    yield {
+                        "observations": jnp.expand_dims(X_batch, axis=-1),
+                        "labels":  jnp.array(y_batch), 
+                        "epoch": epoch+1
+                    }
+                    
+                else : 
+                    X_batch = batch.values.reshape(-1, 28,28)/255.0
+                    yield {
+                        "observations": jnp.expand_dims(X_batch, axis=-1),
+                        "epoch": epoch+1
+                    }
         
-    def generate_data_as_train_test_split(self, batch_size: int, val_split= 0.2, shuffle = True, keep_previous=True): 
+    def generate_data_as_train_test_split(self, batch_size: int, epochs=1, val_split= 0.2, shuffle = True, keep_previous=True): 
         assert val_split>0 and val_split<1, "Invalid train_test_split value, should be between 0 and 1, strictly"
         n = self.__image_data.shape[0]
         val_size = int(n * val_split) 
@@ -85,26 +94,42 @@ class DM_Loader :
         # The generators :
          # Generator for Training Data Batches
         def train_generator():
-            for start in range(0, train_size, batch_size):
-                end = min(start + batch_size, train_size)
-                batch = train_data.iloc[start:end]
-                
-                # Assuming 'label' exists for training/validation data
-                y_batch = batch["label"].values
-                X_batch = batch.loc[:, "pixel0":].values.reshape(-1, 28, 28) / 255.0
-                
-                # Yield data formatted for JAX
-                yield jnp.expand_dims(X_batch, axis=-1), jnp.array(y_batch)
-        # Generator for Validation Data Batches
+            for epoch in range(epochs): 
+                for start in range(0, train_size, batch_size):
+                    end = min(start + batch_size, train_size)
+                    batch = train_data.iloc[start:end]
+                    
+                    # Assuming 'label' exists for training/validation data
+                    y_batch = batch["label"].values
+                    X_batch = batch.loc[:, "pixel0":].values.reshape(-1, 28, 28) / 255.0
+                    
+                    # Yield data formatted for JAX
+                    yield {
+                            "observations": jnp.expand_dims(X_batch, axis=-1),
+                            "labels":  jnp.array(y_batch), 
+                            "epoch": epoch+1
+                        }
+                        # Generator for Validation Data Batches
         def val_generator():
-            for start in range(0, val_size, batch_size):
-                end = min(start + batch_size, val_size)
-                batch = val_data.iloc[start:end]
-                
-                # Assuming 'label' exists for training/validation data
-                y_batch = batch["label"].values
-                X_batch = batch.loc[:, "pixel0":].values.reshape(-1, 28, 28) / 255.0
-                
-                # Yield data formatted for JAX
-                yield jnp.expand_dims(X_batch, axis=-1), jnp.array(y_batch)
-        return train_generator() , val_generator() , int(train_size/batch_size) + int(train_size%batch_size >0) , int(val_size/batch_size)+int(val_size%batch_size >0) 
+            for epoch in range(epochs): 
+                for start in range(0, val_size, batch_size):
+                    end = min(start + batch_size, val_size)
+                    batch = val_data.iloc[start:end]
+                    
+                    # Assuming 'label' exists for training/validation data
+                    y_batch = batch["label"].values
+                    X_batch = batch.loc[:, "pixel0":].values.reshape(-1, 28, 28) / 255.0
+                    
+                    # Yield data formatted for JAX
+                    yield {
+                            "observations": jnp.expand_dims(X_batch, axis=-1),
+                            "labels":  jnp.array(y_batch), 
+                            "epoch": epoch+1
+                        }
+        return {
+            "train_generator" : train_generator, 
+            "val_generator" : val_generator, 
+            "training_num_batches" : int(train_size/batch_size) + int(train_size%batch_size >0), 
+            "val_num_batches" : int(val_size/batch_size)+int(val_size%batch_size >0) 
+        }
+    

@@ -49,7 +49,7 @@ class JaxModel :
         """
         A special form of forward for inference
         """
-        __response = self.forward(__response)
+        __response = self.forward(batch)
         # Do something here
         return __response
 
@@ -66,8 +66,8 @@ class JaxModel :
     The fitting 
     """
 
-    def fit(self, train_generator, val_generator = None , **kwargs ): 
-        # The fitting kwargs to take into consideration in case 
+    def fit(self, train_generator, train_num_batches=None, val_generator = None , val_num_batches = None , **kwargs ): 
+        # getting the epochs outside of the training
         pass
 
     """

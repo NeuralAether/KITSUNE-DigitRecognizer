@@ -19,10 +19,10 @@ Output : A softmax function (we will be using linear in our case + logits) -> (N
 
 from config import * 
 from structural.model import JaxModel
-from structural.layers.fullyconnectedlayer import FullyConnectedJaxLayer
-from structural.layers.convolutionallayer import ConvolutionalJaxLayer
-from structural.layers.poolinglayer import PoolingJaxLayer
-from structural.layers.special.convolutionalflattenlayer import ConvolutionalAndFlattenJaxLayer
+from structural.layers.fully_connected_layer import FullyConnectedJaxLayer
+from structural.layers.convolutional_layer import ConvolutionalJaxLayer
+from structural.layers.pooling_layer import PoolingJaxLayer
+from structural.layers.special.convolutional_flatten_layer import ConvolutionalAndFlattenJaxLayer
 
 class LeNetJaxImplementation(JaxModel) : 
     """
@@ -51,3 +51,20 @@ class LeNetJaxImplementation(JaxModel) :
             self.__f6,
             self.__output
         ] 
+
+    """
+    The prediction function is interesting for this : 
+    """
+
+    def predict(self, batch: jnp.ndarray, **kwargs) : 
+        __logits = self.forward(batch)
+        __max_logits = jnp.max(__logits, axis= 1, keepdims=True)
+        __corrected_logits = __logits - __max_logits 
+        __exp_logits = jnp.exp(__corrected_logits)
+        __sum_exp_logits = jnp.sum(__exp_logits, axis= 1, keepdims=True)
+        return {
+            "probabilities" : __exp_logits/__sum_exp_logits, 
+            "predicted_labels" : jnp.argmax(__exp_logits/__sum_exp_logits, axis=1)
+        }
+    
+    
