@@ -58,9 +58,7 @@ class LeNetJaxImplementation(JaxModel) :
 
     def predict(self, batch: jnp.ndarray, **kwargs) : 
         __logits = self.forward(batch)
-        __max_logits = jnp.max(__logits, axis= 1, keepdims=True)
-        __corrected_logits = __logits - __max_logits 
-        __exp_logits = jnp.exp(__corrected_logits)
+        __exp_logits = jnp.exp(__logits - jnp.max(__logits, axis= 1, keepdims=True) )
         __sum_exp_logits = jnp.sum(__exp_logits, axis= 1, keepdims=True)
         return {
             "probabilities" : __exp_logits/__sum_exp_logits, 

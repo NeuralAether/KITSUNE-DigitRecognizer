@@ -50,6 +50,3 @@ class JaxLayer :
     def get_summary(self) : 
         if (self.weights == {} and self.shapes == {}) :
             raise Exception("Model not constructed yet")
-            
-        
-        pass
