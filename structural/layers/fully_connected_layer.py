@@ -48,3 +48,19 @@ class FullyConnectedJaxLayer(JaxLayer) :
         }, "trainable" : trainable_weights + trainable_bias, 
             "shape" : self.shapes, 
         }, "name": self.name, "id" : self.id}
+    
+    def copy(self) :
+        """
+        To copy the layer 
+        """
+        __new_layer = FullyConnectedJaxLayer(
+            out_channels= self.__out_channels,
+            activation= self.__activation,
+            name= self.name
+        )
+        __new_layer.weights = self.weights.copy()
+        __new_layer.shapes = self.shapes # Copy shapes as well tuple
+        __new_layer.layer_key = self.layer_key
+        __new_layer.id = self.id + "_copy"
+        __new_layer.name = self.name
+        return __new_layer

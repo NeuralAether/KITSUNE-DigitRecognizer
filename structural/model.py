@@ -3,7 +3,6 @@ The structure for a model in jax: To make it easier to code
 """
 
 from config import * 
-
 class JaxModel : 
     """
     Implementation of a model 
@@ -17,8 +16,9 @@ class JaxModel :
         # -------------- Compilation Details ---------------
         self.loss_function = None 
         self.optimizer = None
+        self.is_compiled = False
         # -------------- Training Details ------------------
-        self.callables = kwargs.get("callables",[])  # Functions to call 
+        self.callables = kwargs.get("callables",{})  # Functions to call (name and function)
         # -------------- Some kwargs -----------------------
         self.__kwargs = kwargs
 
@@ -60,15 +60,62 @@ class JaxModel :
     def compile(self, loss_function, optimizer) : 
         self.loss_function = loss_function 
         self.optimizer = optimizer 
-        # Try both 
+        self.is_compiled = True
+
+    """
+    Weight setting and getting
+    """
+
+    def copy(self) : 
+        """
+        Copies the model 
+        """
+        new_model = JaxModel(**self.__kwargs)
+        for layer in self.layers : 
+            new_model.layers.append(layer.copy())
+        return new_model
+
+    def get_weights(self) : 
+        weights = {}
+        for layer in self.layers : 
+            weights[layer.name] = layer.get_weights()
+        return weights
+    
+    def set_weights(self, weights : dict) :
+        set_weights = 0
+        for layer in self.layers : 
+            if layer.name in weights : 
+                layer.set_weights(weights[layer.name]["weights"])
+                set_weights += 1
+        if set_weights != len(weights) : 
+            print(f"Warning : Only {set_weights} out of {len(weights)} layers were set. Check layer names. ")
+        return set_weights
 
     """
     The fitting 
     """
 
     def fit(self, train_generator, train_num_batches=None, val_generator = None , val_num_batches = None , **kwargs ): 
-        # getting the epochs outside of the training
-        pass
+        """
+        Training 
+        """
+        # Check compilation
+        if not self.is_compiled :
+            raise Exception("Model has not been compiled yet. Please compile before fitting. ")
+        # Fitting 
+        train_loss_history = []
+        val_loss_history = []
+        epochs = kwargs.get("num_epochs", 1) # Has to appear in kwargs
+        training_num_batches = train_num_batches
+        validation_num_batches = val_num_batches
+        for batch in train_generator : 
+            images_batch, labels_batch = batch
+            # To be coded : The training step
+            loss = self.loss_function(self, images_batch, labels_batch)
+            train_loss_history.append(loss)
+            # Optimizer step
+            new_weights = self.optimizer.step(self, images_batch, labels_batch)  # To finish later      
+
 
     """
     The save and load to be done later

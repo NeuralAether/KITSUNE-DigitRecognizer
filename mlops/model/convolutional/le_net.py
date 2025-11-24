@@ -52,6 +52,8 @@ class LeNetJaxImplementation(JaxModel) :
             self.__output
         ] 
 
+        self.__kwargs = kwargs
+
     """
     The prediction function is interesting for this : 
     """
@@ -65,4 +67,8 @@ class LeNetJaxImplementation(JaxModel) :
             "predicted_labels" : jnp.argmax(__exp_logits/__sum_exp_logits, axis=1)
         }
     
-    
+    def copy(self):
+        new_model = LeNetJaxImplementation(**self.__kwargs)
+        for layer in self.layers : 
+            new_model.layers.append(layer.copy())
+        return new_model

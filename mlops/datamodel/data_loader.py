@@ -130,6 +130,7 @@ class DM_Loader :
             "train_generator" : train_generator, 
             "val_generator" : val_generator, 
             "training_num_batches" : int(train_size/batch_size) + int(train_size%batch_size >0), 
-            "val_num_batches" : int(val_size/batch_size)+int(val_size%batch_size >0) 
+            "val_num_batches" : int(val_size/batch_size)+int(val_size%batch_size >0) , 
+            "num_epochs": epochs
         }
     

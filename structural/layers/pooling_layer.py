@@ -63,3 +63,16 @@ class PoolingJaxLayer(JaxLayer) :
         "trainable" : 0, 
             "shape" : self.shapes, 
         }, "name": self.name, "id" : self.id}
+    
+    def copy(self) :
+        """
+        To copy the layer 
+        """
+        __new_layer = PoolingJaxLayer(
+            type_= self.__type,
+            window= self.__window,
+            stride= self.__stride,
+            padding= self.__padding,
+            name= self.name
+        )
+        return __new_layer

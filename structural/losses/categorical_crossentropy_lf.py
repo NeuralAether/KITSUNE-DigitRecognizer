@@ -4,6 +4,7 @@ Categorical crossentropy Loss Function definition
 
 from config import * 
 from structural.loss_function import LossFunctionJax
+from structural.model import JaxModel
 
 class CCLossFunctionJax(LossFunctionJax) : 
     """
@@ -32,5 +33,17 @@ class CCLossFunctionJax(LossFunctionJax) :
             __log_probabilities = jnp.log(predicted) # Already are probabilities
             mean_categorical_cross = jnp.mean(-__log_probabilities[jnp.arange(predicted.shape[0]), truth]) 
         return mean_categorical_cross
-
     
+    def getgrad(self, copy_model: JaxModel , observations: jnp.ndarray, labels: jnp.ndarray, weights= None):
+        """
+        This is a bit tricky to code but basically we copy the model at each step
+        """
+        __weights = copy_model.get_weights()
+        def forward_loss_fn(weights , model: JaxModel, observations: jnp.ndarray, labels: jnp.ndarray) : 
+            model.set_weights(weights)
+            __logits = model.forward(labels)
+            loss = self.compute(__logits, labels)
+            return loss
+        grads = jax.grad(lambda w: forward_loss_fn(w, copy_model, observations, labels))(__weights)
+        return grads
+        
