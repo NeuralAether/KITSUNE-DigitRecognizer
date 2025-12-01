@@ -33,17 +33,35 @@ class CCLossFunctionJax(LossFunctionJax) :
             __log_probabilities = jnp.log(predicted) # Already are probabilities
             mean_categorical_cross = jnp.mean(-__log_probabilities[jnp.arange(predicted.shape[0]), truth]) 
         return mean_categorical_cross
-    
-    def getgrad(self, copy_model: JaxModel , observations: jnp.ndarray, labels: jnp.ndarray, weights= None):
+
+    def compute_grad(self, model: JaxModel, batch: jnp.ndarray, truth: jnp.ndarray) : 
         """
-        This is a bit tricky to code but basically we copy the model at each step
+        To compute the gradients of the loss function with respect to the model parameters 
         """
-        __weights = copy_model.get_weights()
-        def forward_loss_fn(weights , model: JaxModel, observations: jnp.ndarray, labels: jnp.ndarray) : 
-            model.set_weights(weights)
-            __logits = model.forward(labels)
-            loss = self.compute(__logits, labels)
-            return loss
-        grads = jax.grad(lambda w: forward_loss_fn(w, copy_model, observations, labels))(__weights)
-        return grads
-        
+        def is_top_leaf(x): 
+            if not isinstance(x, dict):
+                return True
+            if any(k in x for k in ("kernel", "bias", "b")):
+                return True
+            if len(x) == 0:  # empty dict = leaf
+                return True
+            return False
+        original_weights = model.get_weights()
+        pure_weights = jax.tree_util.tree_map(lambda x: x["weights"], original_weights, is_leaf=lambda x: not isinstance(x, dict) or "weights" in x or "name" in x or "id" in x)
+        weight_headers = jax.tree_util.tree_map(lambda x: {"name": x["name"], "id": x["id"]}, original_weights, is_leaf=lambda x: isinstance(x, dict) and "weights" in x)
+        def loss_with_pure_weights(pure_weights, weight_headers, batch, truth): 
+            # Reconstruct weights with headers
+            reconstructed_weights = jax.tree_util.tree_map(
+                lambda w, wh: {"weights": w, "name": wh["name"], "id": wh["id"]},
+                pure_weights,
+                weight_headers,
+                is_leaf=is_top_leaf
+            )
+            copy_model = model.copy()
+            copy_model.set_weights(reconstructed_weights)
+            __logits = copy_model.forward(batch)
+            loss_value = self.compute(__logits, truth)
+            del copy_model
+            return loss_value
+        grads = jax.grad(lambda x: loss_with_pure_weights(x, weight_headers, batch, truth))(pure_weights)
+        return grads, pure_weights, weight_headers

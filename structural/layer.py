@@ -53,8 +53,15 @@ class JaxLayer :
         return {"weights": self.weights, "name": self.name,"id" : self.id}
     
     def set_weights(self, weights): 
-        self.weights = weights
-
+        if not isinstance(weights, dict) : 
+            raise Exception("Weights should be a dictionary")
+        if "weights" not in weights : 
+            self.weights = weights
+        else : 
+            self.weights = weights["weights"]
+            self.name = weights.get("name", self.name)
+            self.id = weights.get("id", self.id)
+            
     """
     The summary of the layer
     """

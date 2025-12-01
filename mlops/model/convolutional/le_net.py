@@ -69,6 +69,8 @@ class LeNetJaxImplementation(JaxModel) :
     
     def copy(self):
         new_model = LeNetJaxImplementation(**self.__kwargs)
+        new_model.layers = []
         for layer in self.layers : 
             new_model.layers.append(layer.copy())
         return new_model
+    

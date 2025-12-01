@@ -11,5 +11,5 @@ class LossFunctionJax :
     def compute(self, predicted, truth) : 
         pass
 
-    def getgrad(self, predicted, truth, weights= None): 
+    def getgrad(self, model, batch, truth): 
         pass

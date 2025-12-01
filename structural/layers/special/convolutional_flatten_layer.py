@@ -94,3 +94,21 @@ class ConvolutionalAndFlattenJaxLayer(JaxLayer):
         }, "trainable" : trainable_weights_bias + trainable_weights_kernel, 
             "shape" : self.shapes, 
         }, "name": self.name, "id" : self.id}
+    
+    def copy(self) :
+        """
+        To copy the layer 
+        """
+        __new_layer = ConvolutionalAndFlattenJaxLayer(
+            out_channels= self.__out_channels,
+            stride= self.__stride,
+            padding= self.__padding,
+            dimensions= self.__dimensions,
+            name= self.name
+        )
+        __new_layer.weights = self.weights.copy()
+        __new_layer.shapes = self.shapes # Copy shapes as well tuple
+        __new_layer.layer_key = self.layer_key
+        __new_layer.id = self.id + "_copy"
+        __new_layer.name = self.name
+        return __new_layer
